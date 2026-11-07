@@ -3,6 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Deep Bore">
+<meta name="theme-color" content="#e5e9e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111613" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
 <title>Deep Bore</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -100,7 +110,7 @@ header.top {
 .bar { height: 6px; background: var(--grid); margin-top: 6px; }
 .bar > i { display: block; height: 100%; background: var(--accent); width: 0%; transition: width .3s linear; }
 
-.rigfloor { position: relative; display: grid; place-items: center; padding: 28px 16px 22px; overflow: hidden; min-height: 330px; }
+.rigfloor { touch-action: none; position: relative; display: grid; place-items: center; padding: 28px 16px 22px; overflow: hidden; min-height: 330px; }
 .bit {
   width: 220px; height: 220px; max-width: 70vw; max-height: 70vw; border-radius: 50%;
   border: 0; padding: 0; background: transparent; cursor: pointer; position: relative;
@@ -191,7 +201,7 @@ footer.foot button { background: none; border: 0; padding: 0; color: var(--muted
 .toast {
   position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   background: var(--ink); color: var(--panel); padding: 10px 16px; font-size: 0.9rem; max-width: calc(100% - 32px);
-  z-index: 20;
+  z-index: 20; pointer-events: none;
 }
 
 @media (max-width: 960px) {
@@ -206,7 +216,10 @@ footer.foot button { background: none; border: 0; padding: 0; color: var(--muted
   .brand h1 { font-size: 2.1rem; }
   .total.ore .v { font-size: 1.5rem; }
   .bit { width: 180px; height: 180px; }
-  .column { height: 62vh; }
+  .column { height: 420px; }
+  .rigfloor { order: -1; min-height: 250px; padding-block: 18px 14px; }
+  .floor { gap: 10px; }
+  .toast { bottom: auto; top: calc(10px + env(safe-area-inset-top, 0px)); }
   .column .cap { display: none; }
   .stratum-now .name { font-size: 1.35rem; }
 }
