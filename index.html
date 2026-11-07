@@ -1,0 +1,909 @@
+<title>Deep Bore</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a borehole log sheet. Core column on the left, the drill in the middle, the rig yard (shop) on the right. */
+:root {
+  --paper: #e5e9e0;
+  --panel: #f1f3ed;
+  --grid: #cdd4c6;
+  --ink: #18211d;
+  --muted: #5a675f;
+  --accent: #c2410c;
+  --accent-ink: #ffffff;
+  --good: #2f7d4f;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #111613; --panel: #19201c; --grid: #2a332e; --ink: #e2e8e1; --muted: #8e9c93;
+    --accent: #f0803f; --accent-ink: #1a0d05; --good: #6cc48f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #111613; --panel: #19201c; --grid: #2a332e; --ink: #e2e8e1; --muted: #8e9c93;
+  --accent: #f0803f; --accent-ink: #1a0d05; --good: #6cc48f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: pointer;
+  background: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 32px;
+}
+button { font: inherit; color: inherit; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.sheet { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+header.top {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px;
+  border-bottom: 2px solid var(--ink); padding-bottom: 10px;
+}
+.brand h1 {
+  font-family: var(--font-display); font-weight: 700; font-size: 2.6rem; line-height: 1;
+  margin: 0; letter-spacing: 0.02em; text-transform: uppercase;
+}
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 0.85rem; }
+.totals { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+.total { display: flex; flex-direction: column; min-width: 0; }
+.label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 600;
+}
+.total .v { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.total.ore .v { font-size: 1.9rem; color: var(--accent); }
+
+.main {
+  display: grid; grid-template-columns: 150px minmax(0, 1fr) minmax(0, 400px); gap: 16px; align-items: start;
+}
+.panel { background: var(--panel); border: 1px solid var(--grid); }
+
+/* Core column */
+.column { position: relative; height: min(78vh, 720px); display: flex; flex-direction: column; }
+.column .cap { padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+.column canvas { flex: 1; width: 100%; min-height: 0; display: block; }
+
+/* Drill floor */
+.floor { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.readings {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--grid); background: var(--panel);
+}
+.reading { padding: 10px 12px; border-right: 1px solid var(--grid); min-width: 0; }
+.reading:last-child { border-right: 0; }
+.reading .v { font-family: var(--font-mono); font-size: 1.05rem; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stratum-now {
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 4px;
+}
+.stratum-now .name { font-family: var(--font-display); font-weight: 600; font-size: 1.7rem; line-height: 1.1; text-wrap: balance; }
+.stratum-now .sub { color: var(--muted); font-size: 0.9rem; }
+.bar { height: 6px; background: var(--grid); margin-top: 6px; }
+.bar > i { display: block; height: 100%; background: var(--accent); width: 0%; transition: width .3s linear; }
+
+.rigfloor { position: relative; display: grid; place-items: center; padding: 28px 16px 22px; overflow: hidden; min-height: 330px; }
+.bit {
+  width: 220px; height: 220px; max-width: 70vw; max-height: 70vw; border-radius: 50%;
+  border: 0; padding: 0; background: transparent; cursor: pointer; position: relative;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.bit svg { width: 100%; height: 100%; display: block; transition: transform .18s cubic-bezier(.3,1.6,.5,1); }
+.bit:active svg { transform: scale(0.94); }
+.bit-hint { margin-top: 10px; font-family: var(--font-mono); font-size: 0.85rem; color: var(--muted); text-align: center; }
+.floater {
+  position: absolute; pointer-events: none; font-family: var(--font-mono); font-weight: 500; color: var(--accent);
+  animation: rise .9s ease-out forwards; white-space: nowrap; font-size: 1rem;
+}
+@keyframes rise { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -70px); } }
+.geode {
+  position: absolute; width: 58px; height: 58px; border: 0; padding: 0; background: transparent; cursor: pointer;
+  animation: bob 1.6s ease-in-out infinite;
+}
+@keyframes bob { 50% { transform: translateY(-6px) rotate(8deg); } }
+.frenzy {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  background: var(--accent); color: var(--accent-ink); font-family: var(--font-mono); font-size: 0.8rem;
+  padding: 3px 10px; white-space: nowrap;
+}
+
+.prestige { padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.prestige .txt { min-width: 0; flex: 1 1 260px; }
+.prestige h2, .log h2, .yard h2 {
+  font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; margin: 0; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.prestige p { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+.btn {
+  border: 1.5px solid var(--ink); background: transparent; padding: 8px 14px; cursor: pointer;
+  font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; letter-spacing: 0.03em; text-transform: uppercase;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.log { padding: 14px 16px; }
+.log table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.88rem; }
+.log td, .log th { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+.log th { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 600; }
+.log td.mono { white-space: nowrap; }
+.swatch { display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border: 1px solid var(--grid); }
+.log tr.next td { color: var(--muted); font-style: italic; }
+.log-wrap { max-height: 300px; overflow: auto; }
+
+/* Rig yard */
+.yard { display: flex; flex-direction: column; min-width: 0; }
+.yard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--grid); flex-wrap: wrap; }
+.qty { display: flex; border: 1.5px solid var(--ink); }
+.qty button { border: 0; background: transparent; padding: 3px 9px; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; }
+.qty button + button { border-left: 1.5px solid var(--ink); }
+.qty button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center;
+  width: 100%; text-align: left; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--grid);
+  background: transparent; cursor: pointer;
+}
+.item:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.item:disabled { cursor: not-allowed; }
+.item:disabled .cost { opacity: 0.45; }
+.item .nm { font-weight: 600; font-size: 1rem; min-width: 0; }
+.item .owned { font-family: var(--font-mono); font-size: 1.1rem; text-align: right; font-variant-numeric: tabular-nums; }
+.item .ds { color: var(--muted); font-size: 0.82rem; min-width: 0; }
+.item .cost { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); text-align: right; white-space: nowrap; }
+.item.locked { cursor: default; }
+.item.locked .nm { color: var(--muted); letter-spacing: 0.2em; }
+.item.bitup { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.workshop { border-bottom: 1px solid var(--grid); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.workshop-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.workshop-head h3 { margin: 0; font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.ups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.up {
+  display: flex; flex-direction: column; gap: 1px; text-align: left; padding: 7px 9px; cursor: pointer;
+  border: 1.5px solid var(--ink); background: var(--panel); min-width: 0;
+}
+.up:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.up:disabled { cursor: not-allowed; border-color: var(--grid); }
+.up .un { font-weight: 600; font-size: 0.86rem; line-height: 1.2; }
+.up .ue { color: var(--muted); font-size: 0.76rem; line-height: 1.25; }
+.up .uc { font-family: var(--font-mono); font-size: 0.76rem; color: var(--accent); margin-top: 2px; }
+.up:disabled .uc { opacity: 0.5; }
+.ups-empty { color: var(--muted); font-size: 0.82rem; }
+
+footer.foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; color: var(--muted); font-size: 0.8rem; }
+footer.foot button { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 0.8rem; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  background: var(--ink); color: var(--panel); padding: 10px 16px; font-size: 0.9rem; max-width: calc(100% - 32px);
+  z-index: 20;
+}
+
+@media (max-width: 960px) {
+  .main { grid-template-columns: 96px minmax(0, 1fr); }
+  .yard { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .main { grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
+  .readings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reading:nth-child(2) { border-right: 0; }
+  .reading:nth-child(-n+2) { border-bottom: 1px solid var(--grid); }
+  .brand h1 { font-size: 2.1rem; }
+  .total.ore .v { font-size: 1.5rem; }
+  .bit { width: 180px; height: 180px; }
+  .column { height: 62vh; }
+  .column .cap { display: none; }
+  .stratum-now .name { font-size: 1.35rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floater { animation: fade .9s ease-out forwards; }
+  @keyframes fade { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, 0); } }
+  .geode { animation: none; }
+  .bit svg, .bar > i { transition: none; }
+}
+</style>
+
+<div class="sheet">
+  <header class="top">
+    <div class="brand">
+      <h1>Deep Bore</h1>
+      <p>Drill down. The rock never runs out.</p>
+    </div>
+    <div class="totals">
+      <div class="total ore"><span class="label">Ore</span><span class="v" id="t-ore">0</span></div>
+      <div class="total"><span class="label">Ore / second</span><span class="v" id="t-ops">0</span></div>
+      <div class="total"><span class="label">Core samples</span><span class="v" id="t-samples">0</span></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="column panel" aria-label="Core column">
+      <div class="cap label">Core column</div>
+      <canvas id="core"></canvas>
+    </aside>
+
+    <section class="floor">
+      <div class="readings">
+        <div class="reading"><div class="label">Depth</div><div class="v" id="r-depth">0 m</div></div>
+        <div class="reading"><div class="label">Rock temp</div><div class="v" id="r-temp">12 °C</div></div>
+        <div class="reading"><div class="label">Pressure</div><div class="v" id="r-press">0 MPa</div></div>
+        <div class="reading"><div class="label">Strata bonus</div><div class="v" id="r-bonus">×1.00</div></div>
+      </div>
+
+      <div class="panel stratum-now">
+        <span class="label">Bit is in</span>
+        <span class="name" id="s-name">Topsoil</span>
+        <span class="sub" id="s-sub">Next layer at 2 m</span>
+        <div class="bar"><i id="s-bar"></i></div>
+      </div>
+
+      <div class="panel rigfloor" id="rigfloor">
+        <div>
+          <button class="bit" id="bit" aria-label="Drill">
+            <svg viewBox="0 0 200 200" aria-hidden="true">
+              <g id="bit-rot" style="transform-origin:100px 100px">
+                <circle cx="100" cy="100" r="94" fill="var(--ink)"/>
+                <circle cx="100" cy="100" r="86" fill="var(--panel)" stroke="var(--grid)" stroke-width="2"/>
+                <g id="cones"></g>
+                <circle cx="100" cy="100" r="12" fill="var(--ink)"/>
+                <circle cx="100" cy="100" r="5" fill="var(--accent)"/>
+              </g>
+            </svg>
+          </button>
+          <div class="bit-hint" id="bit-hint">+1 ore per strike</div>
+        </div>
+      </div>
+
+      <div class="panel prestige">
+        <div class="txt">
+          <h2>Cap the bore</h2>
+          <p id="p-text">Seal this hole and send the cores to the lab. Each core sample adds 2% to all output, forever. Reach 1B ore in a run to start collecting.</p>
+        </div>
+        <button class="btn primary" id="p-btn" disabled>Cap for 0 samples</button>
+      </div>
+
+      <div class="panel log">
+        <h2>Bore log</h2>
+        <div class="log-wrap">
+          <table>
+            <thead><tr><th>From</th><th>Lithology</th><th>Bonus</th></tr></thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel yard" aria-label="Rig yard">
+      <div class="yard-head">
+        <h2>Rig yard</h2>
+        <div class="qty" role="group" aria-label="Buy amount">
+          <button data-q="1" aria-pressed="true">×1</button>
+          <button data-q="10" aria-pressed="false">×10</button>
+          <button data-q="100" aria-pressed="false">×100</button>
+          <button data-q="max" aria-pressed="false">Max</button>
+        </div>
+      </div>
+      <div class="workshop">
+        <div class="workshop-head"><h3>Workshop</h3><span class="label" id="ups-count">One-time upgrades</span></div>
+        <div class="ups" id="ups"></div>
+      </div>
+      <div id="shop"></div>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <span id="f-stats">Saved in this browser.</span>
+    <span><button id="wipe">Wipe save</button></span>
+  </footer>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+  // ---------- Log-space numbers: every amount is stored as log10(value). 0 is -Infinity. ----------
+  const NEG = -Infinity;
+  const L2 = Math.log10(2);
+  const add = (a, b) => {
+    if (a === NEG) return b; if (b === NEG) return a;
+    const m = Math.max(a, b), d = Math.min(a, b) - m;
+    return m + Math.log10(1 + Math.pow(10, d));
+  };
+  const sub = (a, b) => {
+    if (b === NEG) return a; if (b >= a) return NEG;
+    return a + Math.log10(1 - Math.pow(10, b - a));
+  };
+  const fromNum = x => x > 0 ? Math.log10(x) : NEG;
+
+  const SHORT = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", "OcDc", "NoDc", "Vg"];
+  const ABC = "abcdefghijklmnopqrstuvwxyz";
+  function fmt(l) {
+    if (l === NEG || l < -2) return "0";
+    if (l < 2) { const v = Math.pow(10, l); return v < 10 ? (Math.floor(v * 10) / 10).toString() : Math.floor(v).toString(); }
+    if (l < 6) return Math.floor(Math.pow(10, l) + 1e-9).toLocaleString("en-US");
+    let s = Math.floor(l / 3);
+    let m = Math.pow(10, l - s * 3);
+    if (m >= 999.995) { m /= 1000; s += 1; }
+    const ms = m < 10 ? m.toFixed(2) : m < 100 ? m.toFixed(1) : m.toFixed(0);
+    if (s < SHORT.length) return ms + " " + SHORT[s];
+    const j = s - SHORT.length;
+    if (j < 676) return ms + " " + ABC[Math.floor(j / 26)] + ABC[j % 26];
+    if (l < 1e9) { const e = Math.floor(l); return Math.pow(10, l - e).toFixed(2) + "e" + e.toLocaleString("en-US"); }
+    return "10^" + fmt(Math.log10(l));
+  }
+  const fmtInt = n => n < 1e15 ? Math.floor(n).toLocaleString("en-US") : fmt(Math.log10(n));
+
+  // ---------- Rigs: hand-named tiers, then generated forever ----------
+  const RIG_NAMES = ["Hand auger", "Post-hole crew", "Cable-tool rig", "Percussion hammer", "Rotary table", "Top drive",
+    "Mud-pump gang", "Directional rig", "Jack-up platform", "Superdeep derrick", "Thermal lance", "Plasma bore"];
+  const PRE = ["Graviton", "Fusion", "Lattice", "Tidal", "Null-field", "Chrono", "Quark", "Spiral", "Phase", "Echo", "Mantle-born", "Singularity"];
+  const NOUN = ["bore", "lance", "auger", "engine", "drill", "sounder"];
+  const ROMAN = n => { const t = [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],[50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]]; let o = ""; for (const [v, s] of t) while (n >= v) { o += s; n -= v; } return o; };
+  function rigName(i) {
+    if (i < RIG_NAMES.length) return RIG_NAMES[i];
+    const j = i - RIG_NAMES.length, per = PRE.length * NOUN.length, cyc = Math.floor(j / per), k = j % per;
+    const nm = PRE[k % PRE.length] + " " + NOUN[Math.floor(k / PRE.length)];
+    return cyc > 0 ? nm + " Mk " + ROMAN(cyc + 1) : nm;
+  }
+  const G = 1.15, LG = Math.log10(G), LGm1 = Math.log10(G - 1);
+  const lcost = i => Math.log10(12) + i * 1.12 + i * i * 0.012;
+  const lprod = i => -1 + i * 1.0 + i * i * 0.01;
+  const milestones = n => Math.floor(n / 25);
+  function costFor(i, n, k) {
+    const base = lcost(i) + n * LG, kl = k * LG;
+    return base + kl + Math.log10(1 - Math.pow(10, -kl)) - LGm1;
+  }
+  function maxAfford(i, n) {
+    if (S.ore === NEG) return 0;
+    const x = S.ore - (lcost(i) + n * LG) + LGm1;
+    return Math.max(0, Math.floor(add(x, 0) / LG + 1e-9));
+  }
+  const bitCost = () => Math.log10(40) + S.bit * Math.log10(3.2);
+  const bitPower = () => S.bit * Math.log10(1.9);
+
+  // ---------- Strata ----------
+  const EARTH = [
+    [0, "Topsoil", "#5b3f2a", "Roots, worms, the odd lost coin."],
+    [2, "Clay subsoil", "#9a6440", "Sticky. The auger squeals."],
+    [8, "Glacial till", "#857b6e", "Boulders dumped by ice sheets long gone."],
+    [25, "Sandstone", "#c08a52", "Old beaches, pressed to stone."],
+    [60, "Shale", "#4f4a4e", "Mud from a vanished sea floor."],
+    [120, "Limestone", "#bcb197", "Built from shells. Fizzes in acid."],
+    [250, "Dolomite", "#a69c86", "Limestone that soaked up magnesium."],
+    [500, "Granite", "#a7837d", "Pink feldspar and glassy quartz. Hard going."],
+    [1000, "Gneiss", "#6e6a6f", "Granite squeezed into stripes."],
+    [3000, "Basalt", "#34373a", "Cooled lava, dense and black."],
+    [7000, "Gabbro", "#3d4a3e", "Basalt that cooled slowly, deep down."],
+    [35000, "Upper mantle peridotite", "#56743d", "Olivine green. You have crossed the Moho."],
+    [410000, "Transition zone", "#647a50", "Olivine collapses into wadsleyite."],
+    [660000, "Lower mantle", "#6f5241", "Bridgmanite: the most common mineral on Earth."],
+    [2700000, "D″ layer", "#80412d", "A ragged boundary where mantle meets metal."],
+    [2890000, "Outer core", "#c9581f", "Liquid iron and nickel. The magnetic field starts here."],
+    [5150000, "Inner core", "#e09a3c", "Solid iron, hotter than the Sun's surface."],
+    [6371000, "Centre of the Earth", "#f1cf78", "Every direction is up. The bit keeps turning."],
+  ];
+  const ADJ = ["Banded", "Glassy", "Hollow", "Singing", "Ferrous", "Pale", "Weeping", "Lattice", "Ashen", "Prismatic", "Fossil", "Silent", "Vaulted", "Echoing", "Cinder", "Tidal"];
+  const MAT = ["obsidian", "cobalt seam", "mirror quartz", "chalk sea", "iron rain", "star basalt", "geode field", "salt vault", "bone marl", "amber shelf", "nickel forest", "lumen shale", "black opal", "frozen magma"];
+  const FLAV = ["Nothing on any survey says this should be here.", "The core samples hum faintly.", "The drill string runs warm, then cold.", "The crew stops asking how deep.", "It rings like a bell when struck.", "The lab sends back a single question mark."];
+  const U0 = 6371000, UStep = 1.5e6, UGrow = 1.08;
+  const uStart = k => U0 + UStep * (Math.pow(UGrow, k) - 1) / (UGrow - 1);
+  const hash = n => { let x = (n + 1) * 2654435761 % 4294967296; x ^= x >>> 13; x = Math.imul(x, 1274126177) >>> 0; return x / 4294967296; };
+  function stratum(idx) {
+    if (idx < EARTH.length) { const e = EARTH[idx]; return { start: e[0], name: e[1], color: e[2], note: e[3] }; }
+    const k = idx - EARTH.length + 1;
+    const a = ADJ[Math.floor(hash(k * 3) * ADJ.length)], m = MAT[Math.floor(hash(k * 7 + 1) * MAT.length)];
+    const hue = Math.floor(hash(k * 11 + 2) * 360), sat = 20 + Math.floor(hash(k * 13) * 45), lit = 28 + Math.floor(hash(k * 17) * 40);
+    return { start: uStart(k), name: "U-" + k + " · " + a + " " + m, color: `hsl(${hue} ${sat}% ${lit}%)`, note: FLAV[Math.floor(hash(k * 19) * FLAV.length)] };
+  }
+  function stratumIndexAt(m) {
+    if (m < U0) { let i = 0; while (i + 1 < EARTH.length && EARTH[i + 1][0] <= m) i++; return i; }
+    const k = Math.floor(Math.log(1 + (m - U0) * (UGrow - 1) / UStep) / Math.log(UGrow) + 1e-9);
+    return EARTH.length - 1 + k;
+  }
+  const depthOf = lRun => lRun === NEG || lRun <= 0 ? 0 : Math.min(1e300, 4 * lRun * lRun);
+  const runLogForDepth = m => Math.sqrt(m / 4);
+  const STRATA_BONUS = Math.log10(1.3);
+
+  function tempC(m) {
+    const d = m / 1000;
+    if (d < 35) return 12 + 25 * d;
+    if (d < 2890) return 887 + (d - 35) * (3700 - 887) / 2855;
+    if (d <= 6371) return 3700 + (d - 2890) * (5400 - 3700) / 3481;
+    return null;
+  }
+  function pressMPa(m) {
+    const d = m / 1000;
+    if (d < 35) return d * 27;
+    if (d < 2890) return 945 + (d - 35) * (136000 - 945) / 2855;
+    if (d <= 6371) return 136000 + (d - 2890) * (364000 - 136000) / 3481;
+    return null;
+  }
+  function fmtDepth(m) {
+    if (m < 10) return m.toFixed(1) + " m";
+    if (m < 1000) return Math.floor(m) + " m";
+    if (m < 1e7) return (m / 1000).toLocaleString("en-US", { maximumFractionDigits: m < 1e5 ? 2 : 0 }) + " km";
+    return fmt(Math.log10(m / 1000)) + " km";
+  }
+
+  // ---------- State ----------
+  const KEY = "deep-bore-v1";
+  const fresh = () => ({ ore: NEG, run: NEG, life: NEG, samples: NEG, rigs: [], bit: 0, clicks: 0, caps: 0, best: 0, frenzyUntil: 0, ups: {}, geodes: 0, last: Date.now() });
+  let S = fresh();
+  const pack = s => JSON.stringify(s, (k, v) => v === NEG ? "NEG" : v);
+  const unpack = str => JSON.parse(str, (k, v) => v === "NEG" ? NEG : v);
+  // Two copies of the save: this browser (instant) and the player's account (survives cleared storage and other devices).
+  let cloudDoc = null, cloudBusy = false, cloudPending = false, saveWhere = "Saved in this browser";
+  async function cloudWrite() {
+    if (!cloudDoc) return;
+    if (cloudBusy) { cloudPending = true; return; }
+    cloudBusy = true;
+    try { await cloudDoc.set({ save: pack(S), updated: Date.now() }); saveWhere = "Saved to your account"; }
+    catch (e) { saveWhere = "Saved in this browser"; }
+    cloudBusy = false;
+    if (cloudPending) { cloudPending = false; cloudWrite(); }
+  }
+  function save(toCloud = true) {
+    S.last = Date.now();
+    try { localStorage.setItem(KEY, pack(S)); } catch (e) {}
+    if (toCloud) cloudWrite();
+  }
+  async function connectCloud() {
+    try {
+      if (!window.claude?.use) return;
+      const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+      if (!db || !user) return;
+      const uid = await user.id();
+      if (!uid) return;
+      const ref = db.doc("data/users/" + uid + "/save");
+      const snap = await ref.get();
+      cloudDoc = ref;
+      if (snap.exists) {
+        const remote = Object.assign(fresh(), unpack(String(snap.data().save || "null")) || {});
+        // Keep whichever save has mined more ore over its lifetime.
+        if (remote.life > S.life + 1e-9) { adopt(remote, true); toast("Loaded your saved game.", 3000); return; }
+      }
+      cloudWrite();
+    } catch (e) { cloudDoc = null; }
+  }
+  function load() { try { const r = localStorage.getItem(KEY); return r ? Object.assign(fresh(), unpack(r)) : null; } catch (e) { return null; } }
+
+  // ---------- One-time upgrades (generated forever) ----------
+  const RIG_MOD = ["Carbide teeth", "Night shift", "Better drilling mud", "Steel casing", "Torque converter", "Diamond inserts", "Telemetry", "Heat shields", "Overdrive gearbox", "Crew bonus"];
+  const rigThr = k => k < 6 ? [1, 10, 25, 50, 100, 150][k] : 150 + (k - 5) * 100;
+  const HOLD = [[0, "Trigger spring", 9], [150, "Pneumatic trigger", 12], [600, "Hydraulic trigger", 15], [2500, "Servo trigger", 19], [8000, "Hammer-drill trigger", 24], [25000, "Twin-bit head", 30], [80000, "Triple-bit head", 38]];
+  const CLICK_NAMES = ["Grip tape", "Steel-toe boots", "Heavier hammer", "Shock absorbers", "Strike plate", "Work rhythm", "Iron forearms", "Muscle memory"];
+  const clickThr = k => Math.round(40 * Math.pow(3, k));
+  const GEODE_UPS = [[1, "Geode sense", "Geodes show up twice as often", 3], [3, "Long veins", "Rich veins last 40 seconds", 6], [7, "Cache maps", "Ore caches are 3× bigger", 10], [15, "Crystal ear", "Geodes show up twice as often again", 16]];
+  const suffix = (k, len) => k >= len ? " " + ROMAN(Math.floor(k / len) + 1) : "";
+  function availableUps() {
+    const out = [], has = id => S.ups[id];
+    HOLD.forEach(([need, name, rate], k) => { const id = "h" + k; if (!has(id) && S.clicks >= need) out.push({ id, name, eff: `Hold to drill at ${rate} strikes a second`, cost: 1.3 + k * 1.9 }); });
+    for (let k = 0; S.clicks >= clickThr(k); k++) {
+      const id = "c" + k; if (has(id)) continue;
+      const nm = CLICK_NAMES[k % CLICK_NAMES.length] + suffix(k, CLICK_NAMES.length);
+      out.push({ id, name: nm, eff: k % 2 ? "Strikes dig 3× more" : "Strikes pull +3% of ore/s", cost: 2 + k * 2.1 });
+    }
+    for (let i = 0; i < S.rigs.length; i++) {
+      const n = S.rigs[i] || 0;
+      for (let k = 0; rigThr(k) <= n; k++) {
+        const id = `r${i}.${k}`; if (has(id)) continue;
+        out.push({ id, name: `${RIG_MOD[k % RIG_MOD.length]}${suffix(k, RIG_MOD.length)}`, eff: `${rigName(i)} output ×2`, cost: lcost(i) + rigThr(k) * LG + 1 });
+      }
+    }
+    for (let j = 1; j <= cache.idx; j++) {
+      const id = "s" + j; if (has(id)) continue;
+      out.push({ id, name: `Survey: ${stratum(j).name}`, eff: "All output ×1.5", cost: Math.max(1, runLogForDepth(stratum(j).start) - 1) });
+    }
+    GEODE_UPS.forEach(([need, name, eff, cost], k) => { const id = "g" + k; if (!has(id) && S.geodes >= need) out.push({ id, name, eff, cost }); });
+    return out.sort((a, b) => a.cost - b.cost);
+  }
+  let U;
+  function rebuildUps() {
+    U = { rig: [], survey: 0, clickPct: 0.04, clickMul: 0, hold: 6, geodeFreq: 1, veinSec: 20, cacheMul: 0, count: 0 };
+    for (const id in S.ups) {
+      if (!S.ups[id]) continue; U.count++;
+      const t = id[0], k = parseInt(id.slice(1), 10);
+      if (t === "r") { const i = parseInt(id.slice(1), 10); U.rig[i] = (U.rig[i] || 0) + 1; }
+      else if (t === "s") U.survey++;
+      else if (t === "h") U.hold = Math.max(U.hold, HOLD[k] ? HOLD[k][2] : 6);
+      else if (t === "c") { if (k % 2) U.clickMul += Math.log10(3); else U.clickPct += 0.03; }
+      else if (t === "g") { if (k === 0 || k === 3) U.geodeFreq *= 2; if (k === 1) U.veinSec = 40; if (k === 2) U.cacheMul = Math.log10(3); }
+    }
+  }
+
+  // ---------- Derived values ----------
+  let cache = { ops: NEG, g: 0, idx: 0, depth: 0 };
+  const sampleMult = () => S.samples === NEG ? 0 : add(S.samples + Math.log10(0.02), 0);
+  const frenzyOn = () => Date.now() < S.frenzyUntil;
+  function recompute() {
+    const depth = depthOf(S.run);
+    const idx = stratumIndexAt(depth);
+    const g = sampleMult() + idx * STRATA_BONUS + U.survey * Math.log10(1.5) + (frenzyOn() ? Math.log10(5) : 0);
+    let ops = NEG;
+    for (let i = 0; i < S.rigs.length; i++) {
+      const n = S.rigs[i]; if (!n) continue;
+      ops = add(ops, lprod(i) + Math.log10(n) + (milestones(n) + (U.rig[i] || 0)) * L2);
+    }
+    cache = { ops: ops === NEG ? NEG : ops + g, g, idx, depth };
+  }
+  const clickValue = () => add(bitPower() + U.clickMul + cache.g, cache.ops === NEG ? NEG : cache.ops + Math.log10(U.clickPct));
+  function gain(l) { if (l === NEG) return; S.ore = add(S.ore, l); S.run = add(S.run, l); S.life = add(S.life, l); }
+
+  // ---------- DOM ----------
+  const $ = id => document.getElementById(id);
+  const el = { ore: $("t-ore"), ops: $("t-ops"), samples: $("t-samples"), depth: $("r-depth"), temp: $("r-temp"), press: $("r-press"), bonus: $("r-bonus"),
+    sName: $("s-name"), sSub: $("s-sub"), sBar: $("s-bar"), bit: $("bit"), hint: $("bit-hint"), floor: $("rigfloor"), pText: $("p-text"), pBtn: $("p-btn"),
+    log: $("log-body"), shop: $("shop"), stats: $("f-stats"), toast: $("toast"), rot: $("bit-rot"), cones: $("cones"), canvas: $("core") };
+
+  // Tricone bit drawing
+  (function drawCones() {
+    let h = "";
+    for (let c = 0; c < 3; c++) {
+      const a = c * 120 - 90, r = a * Math.PI / 180;
+      const cx = 100 + Math.cos(r) * 42, cy = 100 + Math.sin(r) * 42;
+      h += `<g transform="rotate(${a + 90} ${cx} ${cy})"><ellipse cx="${cx}" cy="${cy}" rx="30" ry="38" fill="var(--muted)" stroke="var(--ink)" stroke-width="3"/>`;
+      for (let row = 0; row < 3; row++) for (let t = 0; t < 4 - row; t++) {
+        const tx = cx - 18 + row * 6 + t * 12, ty = cy - 22 + row * 18;
+        h += `<circle cx="${tx}" cy="${ty}" r="4" fill="var(--ink)"/>`;
+      }
+      h += `</g>`;
+    }
+    el.cones.innerHTML = h;
+  })();
+
+  let qty = "1";
+  document.querySelectorAll(".qty button").forEach(b => b.addEventListener("click", () => {
+    qty = b.dataset.q;
+    document.querySelectorAll(".qty button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    buildShop(); updateShop();
+  }));
+
+  let toastTimer;
+  function toast(msg, ms = 3500) { el.toast.textContent = msg; el.toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.toast.hidden = true, ms); }
+
+  function floater(text, x, y) {
+    const f = document.createElement("span"); f.className = "floater"; f.textContent = text;
+    f.style.left = x + "px"; f.style.top = y + "px";
+    el.floor.appendChild(f); setTimeout(() => f.remove(), 950);
+  }
+
+  // Drill click
+  let rotation = 0, shake = 0;
+  let lastFloat = 0;
+  function strike(ev) {
+    const v = clickValue(); gain(v); S.clicks++;
+    rotation += 37; el.rot.style.transform = `rotate(${rotation}deg)`; shake = 1;
+    const now = performance.now();
+    if (now - lastFloat > 80) {
+      lastFloat = now;
+      const fr = el.floor.getBoundingClientRect();
+      let x, y;
+      const inside = ev && ev.clientX >= fr.left && ev.clientX <= fr.right && ev.clientY >= fr.top && ev.clientY <= fr.bottom;
+      if (inside) { x = ev.clientX - fr.left; y = ev.clientY - fr.top - 10; }
+      else { const br = el.bit.getBoundingClientRect(); x = br.left - fr.left + br.width / 2; y = br.top - fr.top + 20; }
+      x += (Math.random() - 0.5) * 30;
+      floater("+" + fmt(v), x, y);
+    }
+    recompute();
+  }
+  // Press anywhere to strike; keep holding to keep drilling. Other buttons and the rig yard are excluded.
+  let holding = false, holdAcc = 0, holdPos = null;
+  document.addEventListener("pointerdown", ev => {
+    if (ev.button !== 0) return;
+    if (ev.target.closest("button:not(#bit), a, input, select, textarea, .yard, .toast, footer")) return;
+    holding = true; holdAcc = 0; holdPos = { clientX: ev.clientX, clientY: ev.clientY };
+    strike(ev);
+  });
+  document.addEventListener("pointermove", ev => { if (holding) holdPos = { clientX: ev.clientX, clientY: ev.clientY }; });
+  const release = () => { holding = false; };
+  ["pointerup", "pointercancel"].forEach(t => document.addEventListener(t, release));
+  window.addEventListener("blur", release);
+  document.addEventListener("contextmenu", ev => { if (holding) ev.preventDefault(); });
+  // Keyboard presses on the bit (Enter / Space) still strike.
+  el.bit.addEventListener("click", ev => { if (ev.detail === 0) strike(null); });
+
+  // Workshop
+  let upsKey = "";
+  const upsEl = $("ups");
+  function updateUps() {
+    const list = availableUps(), shown = list.slice(0, 8);
+    const key = shown.map(u => u.id).join(",") + "|" + list.length;
+    if (key !== upsKey) {
+      upsKey = key;
+      upsEl.innerHTML = shown.length
+        ? shown.map(u => `<button class="up" data-up="${u.id}"><span class="un">${u.name}</span><span class="ue">${u.eff}</span><span class="uc">${fmt(u.cost)} ore</span></button>`).join("")
+        : `<span class="ups-empty">More upgrades unlock as you strike, hire rigs and reach new layers.</span>`;
+      $("ups-count").textContent = `${U.count} installed` + (list.length > shown.length ? ` · ${list.length - shown.length} more waiting` : "");
+    }
+    const costs = Object.fromEntries(shown.map(u => [u.id, u.cost]));
+    upsEl.querySelectorAll("[data-up]").forEach(b => { b.disabled = S.ore < costs[b.dataset.up] - 1e-12; });
+  }
+  upsEl.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-up]"); if (!b) return;
+    const u = availableUps().find(x => x.id === b.dataset.up); if (!u || S.ore < u.cost - 1e-12) return;
+    S.ore = sub(S.ore, u.cost); S.ups[u.id] = 1; rebuildUps(); recompute(); upsKey = ""; updateUps(); updateShop();
+    toast(`Installed ${u.name}: ${u.eff.charAt(0).toLowerCase() + u.eff.slice(1)}.`);
+  });
+
+  // Shop
+  let shopTiers = -1;
+  const visibleTiers = () => { let n = 1; for (let i = 0; i < S.rigs.length; i++) if (S.rigs[i] > 0) n = i + 2; return n; };
+  function buildShop() {
+    const tiers = visibleTiers(); shopTiers = tiers;
+    let h = `<button class="item bitup" id="buy-bit"><span class="nm">Sharpen the bit · level <span id="bit-lvl"></span></span><span class="owned"></span><span class="ds">Each level makes every strike dig 1.9× more.</span><span class="cost" id="bit-cost"></span></button>`;
+    for (let i = 0; i < tiers; i++) {
+      h += `<button class="item" data-rig="${i}"><span class="nm">${rigName(i)}</span><span class="owned" id="own-${i}">0</span><span class="ds" id="ds-${i}"></span><span class="cost" id="cost-${i}"></span></button>`;
+    }
+    h += `<div class="item locked" aria-disabled="true"><span class="nm">? ? ? ? ?</span><span class="owned"></span><span class="ds">Buy a ${rigName(tiers - 1)} to see what's next.</span><span class="cost"></span></div>`;
+    el.shop.innerHTML = h;
+    $("buy-bit").addEventListener("click", () => {
+      const c = bitCost(); if (S.ore < c) return;
+      S.ore = sub(S.ore, c); S.bit++; recompute(); updateShop();
+    });
+    el.shop.querySelectorAll("[data-rig]").forEach(b => b.addEventListener("click", () => buyRig(+b.dataset.rig)));
+  }
+  function amountFor(i) {
+    const n = S.rigs[i] || 0;
+    if (qty === "max") { const k = maxAfford(i, n); return Math.max(1, k); }
+    return +qty;
+  }
+  function buyRig(i) {
+    const n = S.rigs[i] || 0, k = amountFor(i), c = costFor(i, n, k);
+    if (S.ore < c && !(Math.abs(S.ore - c) < 1e-12)) return;
+    S.ore = sub(S.ore, c);
+    while (S.rigs.length <= i) S.rigs.push(0);
+    const before = milestones(n);
+    S.rigs[i] = n + k;
+    if (milestones(S.rigs[i]) > before) toast(`${rigName(i)} crews reach ${fmtInt(S.rigs[i])}. Their output doubles again.`);
+    recompute();
+    if (visibleTiers() !== shopTiers) buildShop();
+    updateShop();
+  }
+  function updateShop() {
+    const bc = bitCost();
+    $("bit-lvl").textContent = S.bit; $("bit-cost").textContent = fmt(bc) + " ore";
+    $("buy-bit").disabled = S.ore < bc;
+    for (let i = 0; i < shopTiers; i++) {
+      const n = S.rigs[i] || 0, k = amountFor(i), c = costFor(i, n, k);
+      const each = lprod(i) + (milestones(n) + (U.rig[i] || 0)) * L2 + cache.g;
+      const btn = el.shop.querySelector(`[data-rig="${i}"]`);
+      $("own-" + i).textContent = fmtInt(n);
+      const next = (milestones(n) + 1) * 25;
+      $("ds-" + i).textContent = `${fmt(each)} ore/s each · output ×2 at ${fmtInt(next)}`;
+      $("cost-" + i).textContent = (k > 1 ? `×${fmtInt(k)} · ` : "") + fmt(c) + " ore";
+      btn.disabled = S.ore < c - 1e-12;
+    }
+  }
+
+  // Prestige
+  const sampleGain = () => S.run === NEG || S.run < 9 ? NEG : (S.run - 9) / 3;
+  let capArmed = false, capTimer;
+  el.pBtn.addEventListener("click", () => {
+    const g = sampleGain(); if (g === NEG) return;
+    if (!capArmed) { capArmed = true; el.pBtn.textContent = "Click again to cap"; clearTimeout(capTimer); capTimer = setTimeout(() => { capArmed = false; updatePrestige(); }, 3000); return; }
+    capArmed = false;
+    S.samples = add(S.samples, g); S.caps++;
+    S.ore = NEG; S.run = NEG; S.rigs = []; S.bit = 0; S.frenzyUntil = 0; S.ups = {}; rebuildUps(); upsKey = "";
+    recompute(); buildShop(); updateShop(); updatePrestige(); buildLog(true);
+    toast(`Bore capped. +${fmt(g)} core samples. A fresh hole, a stronger crew.`);
+    save();
+  });
+  function updatePrestige() {
+    const g = sampleGain();
+    if (capArmed) return;
+    if (g === NEG) {
+      el.pBtn.disabled = true; el.pBtn.textContent = "Needs 1B ore this run";
+    } else {
+      el.pBtn.disabled = false; el.pBtn.textContent = `Cap for ${fmt(g)} samples`;
+    }
+    const now = S.samples === NEG ? "×1.00" : "×" + fmt(sampleMult());
+    el.pText.textContent = `Seal this hole and send the cores to the lab. Each core sample adds 2% to all output, forever. Current lab bonus ${now}. You lose ore, rigs, upgrades and depth.`;
+  }
+
+  // Bore log
+  let loggedIdx = -1;
+  function buildLog(force) {
+    const idx = cache.idx;
+    if (!force && idx === loggedIdx) return;
+    if (!force && idx > loggedIdx && loggedIdx >= 0) {
+      for (let i = loggedIdx + 1; i <= idx; i++) { const s = stratum(i); if (i > 0) toast(`New layer: ${s.name}. ${s.note}`, 4500); }
+    }
+    loggedIdx = idx;
+    let h = "";
+    const nx = stratum(idx + 1);
+    h += `<tr class="next"><td class="mono">${fmtDepth(nx.start)}</td><td>Not yet logged</td><td class="mono">×1.3</td></tr>`;
+    const from = Math.max(0, idx - 60);
+    for (let i = idx; i >= from; i--) {
+      const s = stratum(i);
+      h += `<tr><td class="mono">${fmtDepth(s.start)}</td><td><span class="swatch" style="background:${s.color}"></span>${s.name}</td><td class="mono">${i === 0 ? "—" : "×1.3"}</td></tr>`;
+    }
+    el.log.innerHTML = h;
+  }
+
+  // Geodes
+  let geodeEl = null, nextGeode = Date.now() + 45000 + Math.random() * 60000;
+  function spawnGeode() {
+    const b = document.createElement("button"); b.className = "geode"; b.setAttribute("aria-label", "Geode. Crack it open.");
+    b.innerHTML = `<svg viewBox="0 0 60 60" width="58" height="58"><polygon points="30,3 54,17 54,43 30,57 6,43 6,17" fill="var(--ink)"/><polygon points="30,11 47,21 47,39 30,49 13,39 13,21" fill="var(--accent)"/><polygon points="30,19 39,25 39,35 30,41 21,35 21,25" fill="var(--panel)"/></svg>`;
+    const w = el.floor.clientWidth, h = el.floor.clientHeight;
+    b.style.left = (12 + Math.random() * Math.max(10, w - 82)) + "px";
+    b.style.top = (12 + Math.random() * Math.max(10, h - 82)) + "px";
+    b.addEventListener("click", () => {
+      const r = b.getBoundingClientRect(), fr = el.floor.getBoundingClientRect();
+      if (Math.random() < 0.5) {
+        const base = cache.ops === NEG ? NEG : cache.ops + Math.log10(90);
+        const v = add(base, clickValue() + Math.log10(25)) + U.cacheMul; gain(v);
+        floater("+" + fmt(v), r.left - fr.left + 29, r.top - fr.top);
+        toast(`Geode cracked: an ore cache worth ${fmt(v)}.`);
+      } else {
+        S.frenzyUntil = Date.now() + U.veinSec * 1000;
+        toast(`Geode cracked: a rich vein. All output ×5 for ${U.veinSec} seconds.`);
+      }
+      S.geodes = (S.geodes || 0) + 1; b.remove(); geodeEl = null; recompute();
+    });
+    el.floor.appendChild(b); geodeEl = b;
+    setTimeout(() => { if (geodeEl === b) { b.remove(); geodeEl = null; } }, 12000);
+  }
+  let frenzyEl = null;
+
+  // Core column canvas
+  const ctx = el.canvas.getContext("2d");
+  let dispDepth = 0;
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  let colors = {};
+  const readColors = () => { colors = { ink: cssVar("--ink"), muted: cssVar("--muted"), accent: cssVar("--accent"), panel: cssVar("--panel"), grid: cssVar("--grid") }; };
+  readColors();
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors); } catch (e) {}
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  function drawCore() {
+    const dpr = window.devicePixelRatio || 1;
+    const W = el.canvas.clientWidth, H = el.canvas.clientHeight;
+    if (!W || !H) return;
+    if (el.canvas.width !== Math.round(W * dpr) || el.canvas.height !== Math.round(H * dpr)) { el.canvas.width = Math.round(W * dpr); el.canvas.height = Math.round(H * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const d = dispDepth;
+    const span = Math.max(12, d * 0.9);
+    const top = Math.max(0, d - span * 0.6);
+    const bottom = top + span;
+    const y = m => (m - top) / span * H;
+    const ox = shake ? (Math.random() - 0.5) * 2 : 0; shake = Math.max(0, shake - 0.15);
+    ctx.clearRect(0, 0, W, H);
+    // strata bands
+    let i = stratumIndexAt(top), guard = 0;
+    while (guard++ < 200) {
+      const s = stratum(i), nx = stratum(i + 1);
+      const y0 = Math.max(0, y(s.start)), y1 = Math.min(H, y(nx.start));
+      if (y0 >= H) break;
+      if (y1 > y0) {
+        ctx.fillStyle = s.color; ctx.fillRect(0, y0, W, y1 - y0);
+        // speckle texture, fixed per layer
+        const count = Math.min(400, Math.floor((y1 - y0) * W / 90));
+        ctx.fillStyle = "rgba(0,0,0,0.18)";
+        for (let k = 0; k < count; k++) {
+          const px = hash(i * 977 + k * 3) * W, py = y0 + hash(i * 131 + k * 7 + 5) * (y1 - y0), r = 0.6 + hash(k * 5 + i) * 1.6;
+          ctx.fillRect(px, py, r, r);
+        }
+        ctx.fillStyle = "rgba(255,255,255,0.12)";
+        for (let k = 0; k < count / 3; k++) {
+          const px = hash(i * 409 + k * 11) * W, py = y0 + hash(i * 71 + k * 13 + 9) * (y1 - y0);
+          ctx.fillRect(px, py, 1, 1);
+        }
+        if (s.start >= top) { ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(0, y0, W, 1.5); }
+      }
+      i++;
+    }
+    // bore hole and drill string
+    const cx = W / 2 + ox, by = y(d);
+    ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(cx - 7, 0, 14, by);
+    ctx.fillStyle = colors.grid || "#888"; ctx.fillRect(cx - 2, 0, 4, by);
+    ctx.fillStyle = colors.accent || "#c2410c";
+    ctx.beginPath(); ctx.moveTo(cx - 9, by - 8); ctx.lineTo(cx + 9, by - 8); ctx.lineTo(cx, by + 6); ctx.closePath(); ctx.fill();
+    // depth ticks
+    const raw = span / 5, p = Math.pow(10, Math.floor(Math.log10(raw))), step = raw / p < 2 ? p : raw / p < 5 ? 2 * p : 5 * p;
+    ctx.font = "10px 'IBM Plex Mono', monospace"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (let m = Math.ceil(top / step) * step, n = 0; m <= bottom && n < 20; m += step, n++) {
+      const ty = y(m); if (ty < 8 || ty > H - 6) continue;
+      ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(W - 8, ty, 8, 1);
+      const label = fmtDepth(m).replace(" ", "");
+      ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillText(label, W - 10, ty + 0.5);
+      ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillText(label, W - 11, ty - 0.5);
+    }
+  }
+
+  // ---------- Per-frame UI ----------
+  function updateTop() {
+    el.ore.textContent = fmt(S.ore);
+    el.ops.textContent = fmt(cache.ops);
+    el.samples.textContent = fmt(S.samples);
+    const d = cache.depth;
+    el.depth.textContent = fmtDepth(d);
+    const t = tempC(d), p = pressMPa(d);
+    el.temp.textContent = t === null ? "Off scale" : Math.round(t).toLocaleString("en-US") + " °C";
+    el.press.textContent = p === null ? "Off scale" : p < 1000 ? p.toFixed(p < 10 ? 1 : 0) + " MPa" : (p / 1000).toFixed(1) + " GPa";
+    el.bonus.textContent = "×" + fmt(cache.idx * STRATA_BONUS);
+    const s = stratum(cache.idx), nx = stratum(cache.idx + 1);
+    el.sName.textContent = s.name;
+    const lNeed = runLogForDepth(nx.start);
+    el.sSub.textContent = `${s.note} Next layer at ${fmtDepth(nx.start)} (${fmt(lNeed)} ore mined this run).`;
+    const frac = Math.min(1, Math.max(0, (d - s.start) / (nx.start - s.start)));
+    el.sBar.style.width = (frac * 100).toFixed(1) + "%";
+    el.hint.textContent = `+${fmt(clickValue())} ore per strike · ${U.hold} a second when you hold`;
+    if (frenzyOn()) {
+      if (!frenzyEl) { frenzyEl = document.createElement("div"); frenzyEl.className = "frenzy"; el.floor.appendChild(frenzyEl); }
+      frenzyEl.textContent = `Rich vein ×5 · ${Math.ceil((S.frenzyUntil - Date.now()) / 1000)}s`;
+    } else if (frenzyEl) { frenzyEl.remove(); frenzyEl = null; }
+    if (d > S.best) S.best = d;
+    el.stats.textContent = `Strikes ${S.clicks.toLocaleString("en-US")} · Bores capped ${S.caps} · Deepest ${fmtDepth(S.best)} · Lifetime ore ${fmt(S.life)} · ${saveWhere}`;
+  }
+
+  // ---------- Loop ----------
+  let cloudTick = 0;
+  let lastT = performance.now(), slowAcc = 0, saveAcc = 0, wasFrenzy = false;
+  function frame(t) {
+    const dt = Math.min(1, (t - lastT) / 1000); lastT = t;
+    if (cache.ops !== NEG && dt > 0) gain(cache.ops + Math.log10(dt));
+    const fr = frenzyOn(); if (fr !== wasFrenzy) { wasFrenzy = fr; }
+    if (holding) { holdAcc += dt * U.hold; let n = 0; while (holdAcc >= 1 && n++ < 60) { holdAcc -= 1; strike(holdPos); } }
+    recompute();
+    dispDepth += (cache.depth - dispDepth) * Math.min(1, dt * 6);
+    if (Math.abs(cache.depth - dispDepth) < 1e-6 * Math.max(1, cache.depth)) dispDepth = cache.depth;
+    updateTop(); drawCore();
+    slowAcc += dt; saveAcc += dt;
+    if (slowAcc > 0.2) {
+      slowAcc = 0;
+      if (visibleTiers() !== shopTiers) buildShop();
+      updateShop(); updateUps(); updatePrestige(); buildLog(false);
+      if (!geodeEl && Date.now() > nextGeode) { spawnGeode(); nextGeode = Date.now() + (60000 + Math.random() * 120000) / U.geodeFreq; }
+    }
+    if (saveAcc > 10) { saveAcc = 0; cloudTick++; save(cloudTick % 3 === 0); }
+    requestAnimationFrame(frame);
+  }
+
+  function adopt(state, live) {
+    S = state;
+    if (!S.ups) S.ups = {};
+    rebuildUps(); recompute();
+    // Offline progress, up to 8 hours
+    const away = Math.min(8 * 3600, Math.max(0, (Date.now() - (S.last || Date.now())) / 1000));
+    if (away > 30 && cache.ops !== NEG) {
+      const v = cache.ops - (frenzyOn() ? Math.log10(5) : 0) + Math.log10(away);
+      gain(v); recompute();
+      setTimeout(() => toast(`While you were away the rigs kept turning: +${fmt(v)} ore.`, 5000), 300);
+    }
+    dispDepth = cache.depth;
+    upsKey = ""; buildShop(); updateShop(); updateUps(); updatePrestige(); buildLog(true);
+    if (live) save(false);
+  }
+  function start(data) {
+    const restored = data && data.state ? Object.assign(fresh(), data.state) : load();
+    adopt(restored || fresh(), false);
+    lastT = performance.now();
+    requestAnimationFrame(frame);
+    connectCloud();
+  }
+
+  let wipeArmed = false;
+  $("wipe").addEventListener("click", () => {
+    if (!wipeArmed) { wipeArmed = true; $("wipe").textContent = "Click again to wipe everything"; setTimeout(() => { wipeArmed = false; $("wipe").textContent = "Wipe save"; }, 3000); return; }
+    S = fresh(); rebuildUps(); upsKey = ""; try { localStorage.removeItem(KEY); } catch (e) {} cloudWrite();
+    wipeArmed = false; $("wipe").textContent = "Wipe save";
+    recompute(); dispDepth = 0; buildShop(); updateShop(); updatePrestige(); buildLog(true); toast("Save wiped. Back to topsoil.");
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+  window.addEventListener("pagehide", save);
+
+  window.claude?.hot?.snapshot?.(() => ({ state: S }));
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
