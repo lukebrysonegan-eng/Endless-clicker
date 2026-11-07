@@ -242,6 +242,39 @@ footer.foot button { background: none; border: 0; padding: 0; color: var(--muted
   .stratum-now .name { font-size: 1.25rem; }
   .toast { bottom: auto; top: calc(8px + env(safe-area-inset-top, 0px)); }
 }
+/* Sideways mode: rotates the whole game for phones that have rotation lock on. */
+.turn { display: none; align-self: center; border: 1.5px solid var(--ink); background: transparent; padding: 6px 10px; cursor: pointer;
+  font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.03em; }
+@media (pointer: coarse) and (orientation: portrait) { .turn { display: inline-flex; } }
+html.sideways .turn { display: inline-flex; }
+html.sideways body { overflow: hidden; height: 100%; padding: 0; }
+html.sideways #stage {
+  position: fixed; top: 0; left: 0; width: var(--sv-w); height: var(--sv-h); overflow: hidden;
+  transform-origin: top left; background: transparent;
+}
+html.sideways.cw #stage { transform: rotate(90deg) translateY(-100%); }
+html.sideways.ccw #stage { transform: rotate(-90deg) translateX(-100%); }
+html.sideways .sheet {
+  height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; max-width: none; gap: 10px;
+  padding: 10px max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+}
+html.sideways .main { grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+html.sideways .yard { grid-column: auto; position: sticky; top: 0; max-height: calc(var(--sv-h) - 20px); overflow-y: auto; }
+html.sideways .column { position: relative; height: calc(var(--sv-h) - 100px); min-height: 200px; }
+html.sideways .column .cap { display: none; }
+html.sideways .floor { gap: 10px; }
+html.sideways .rigfloor { order: -1; min-height: 0; padding-block: 12px 10px; }
+html.sideways .bit { width: 140px; height: 140px; max-width: none; max-height: none; }
+html.sideways .readings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+html.sideways .reading:nth-child(2) { border-right: 0; }
+html.sideways .reading:nth-child(-n+2) { border-bottom: 1px solid var(--grid); }
+html.sideways header.top { padding-bottom: 6px; flex-wrap: nowrap; }
+html.sideways .brand h1 { font-size: 1.7rem; }
+html.sideways .brand p { display: none; }
+html.sideways .total .v { font-size: 1.1rem; }
+html.sideways .total.ore .v { font-size: 1.35rem; }
+html.sideways .stratum-now .name { font-size: 1.25rem; }
+html.sideways .toast { position: absolute; bottom: 10px; top: auto; max-width: 360px; font-size: 0.82rem; padding: 7px 12px; }
 @media (prefers-reduced-motion: reduce) {
   .floater { animation: fade .9s ease-out forwards; }
   @keyframes fade { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, 0); } }
@@ -253,12 +286,14 @@ footer.foot button { background: none; border: 0; padding: 0; color: var(--muted
 <body>
 
 
+<div id="stage">
 <div class="sheet">
   <header class="top">
     <div class="brand">
       <h1>Deep Bore</h1>
       <p>Drill down. The rock never runs out.</p>
     </div>
+    <button class="turn" id="turn" type="button">Play sideways</button>
     <div class="totals">
       <div class="total ore"><span class="label">Ore</span><span class="v" id="t-ore">0</span></div>
       <div class="total"><span class="label">Ore / second</span><span class="v" id="t-ops">0</span></div>
@@ -347,6 +382,7 @@ footer.foot button { background: none; border: 0; padding: 0; color: var(--muted
   </footer>
 </div>
 <div class="toast" id="toast" hidden></div>
+</div>
 
 <script>
 (() => {
@@ -628,9 +664,9 @@ footer.foot button { background: none; border: 0; padding: 0; color: var(--muted
       lastFloat = now;
       const fr = el.floor.getBoundingClientRect();
       let x, y;
-      const inside = ev && ev.clientX >= fr.left && ev.clientX <= fr.right && ev.clientY >= fr.top && ev.clientY <= fr.bottom;
+      const inside = !document.documentElement.classList.contains("sideways") && ev && ev.clientX >= fr.left && ev.clientX <= fr.right && ev.clientY >= fr.top && ev.clientY <= fr.bottom;
       if (inside) { x = ev.clientX - fr.left; y = ev.clientY - fr.top - 10; }
-      else { const br = el.bit.getBoundingClientRect(); x = br.left - fr.left + br.width / 2; y = br.top - fr.top + 20; }
+      else { const box = el.bit.parentElement; x = box.offsetLeft + el.bit.offsetLeft + el.bit.offsetWidth / 2; y = box.offsetTop + el.bit.offsetTop + 20; }
       x += (Math.random() - 0.5) * 30;
       floater("+" + fmt(v), x, y);
     }
@@ -942,6 +978,26 @@ footer.foot button { background: none; border: 0; padding: 0; color: var(--muted
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
   window.addEventListener("pagehide", save);
+
+  // Sideways mode: off -> turned right -> turned left -> off
+  const TURN_KEY = "deep-bore-turn", turnBtn = $("turn"), root = document.documentElement;
+  const TURN_LABEL = { off: "Play sideways", cw: "Turn other way", ccw: "Back upright" };
+  function sizeStage() {
+    root.style.setProperty("--sv-w", window.innerHeight + "px");
+    root.style.setProperty("--sv-h", window.innerWidth + "px");
+  }
+  function setTurn(mode) {
+    root.classList.toggle("sideways", mode !== "off");
+    root.classList.toggle("cw", mode === "cw");
+    root.classList.toggle("ccw", mode === "ccw");
+    turnBtn.textContent = TURN_LABEL[mode]; turnBtn.dataset.mode = mode;
+    sizeStage();
+    try { localStorage.setItem(TURN_KEY, mode); } catch (e) {}
+  }
+  turnBtn.addEventListener("click", () => setTurn({ off: "cw", cw: "ccw", ccw: "off" }[turnBtn.dataset.mode || "off"]));
+  window.addEventListener("resize", sizeStage);
+  let savedTurn = "off"; try { savedTurn = localStorage.getItem(TURN_KEY) || "off"; } catch (e) {}
+  setTurn(TURN_LABEL[savedTurn] ? savedTurn : "off");
 
   window.claude?.hot?.snapshot?.(() => ({ state: S }));
   window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
